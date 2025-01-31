@@ -1,6 +1,6 @@
 package generator.service;
 
-import generator.domain.User;
+import com.yupi.springbootinit.model.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**

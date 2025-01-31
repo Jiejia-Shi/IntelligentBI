@@ -1,6 +1,6 @@
-package generator.service;
+package com.yupi.springbootinit.service;
 
-import generator.domain.Chart;
+import com.yupi.springbootinit.model.entity.Chart;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 /**
