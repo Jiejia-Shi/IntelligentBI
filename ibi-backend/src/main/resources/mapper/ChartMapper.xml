@@ -6,6 +6,7 @@
 
     <resultMap id="BaseResultMap" type="com.yupi.springbootinit.model.entity.Chart">
             <id property="id" column="id" />
+            <result property="name" column="name" />
             <result property="goal" column="goal" />
             <result property="chartData" column="chartData" />
             <result property="chartType" column="chartType" />
@@ -18,7 +19,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,goal,chartData,chartType,genChart,genResult, userId,
+        id,name,goal,chartData,chartType,genChart,genResult, userId,
         createTime,updateTime,isDelete
     </sql>
 </mapper>
