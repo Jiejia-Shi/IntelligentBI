@@ -257,8 +257,15 @@ public class ChartController {
         ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "Name is too long");
 
         // convert excel to csv
-        String result = ExcelUtils.convertExcelToCsv(multipartFile);
-        return ResultUtils.success(result);
+        String analysisData = ExcelUtils.convertExcelToCsv(multipartFile);
+
+        // build gpt request
+        StringBuilder sb = new StringBuilder();
+        sb.append("Assume you are a data analyst, please help me make some data analysis based on my analysis goal and data.").append("\n");
+        sb.append("Analysis goal: ").append(goal).append("\n");
+        sb.append("Analysis data: ").append(analysisData).append("\n");
+
+        return ResultUtils.success(sb.toString());
 
 //        String biz = uploadFileRequest.getBiz();
 //        FileUploadBizEnum fileUploadBizEnum = FileUploadBizEnum.getEnumByValue(biz);
