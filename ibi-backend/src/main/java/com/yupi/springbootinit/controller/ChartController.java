@@ -13,11 +13,13 @@ import com.yupi.springbootinit.constant.FileConstant;
 import com.yupi.springbootinit.constant.UserConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
+import com.yupi.springbootinit.manager.GptManager;
 import com.yupi.springbootinit.model.dto.chart.*;
 import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
 import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.model.enums.FileUploadBizEnum;
+import com.yupi.springbootinit.model.vo.GptResultResponse;
 import com.yupi.springbootinit.service.ChartService;
 import com.yupi.springbootinit.service.UserService;
 import com.yupi.springbootinit.utils.ExcelUtils;
@@ -26,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -51,6 +54,10 @@ public class ChartController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private GptManager gptManager;
+
 
     // region 增删改查
 
@@ -246,7 +253,7 @@ public class ChartController {
      * @return
      */
     @PostMapping("/gen")
-    public BaseResponse<String> genChartByAI(@RequestPart("file") MultipartFile multipartFile,
+    public BaseResponse<GptResultResponse> genChartByAI(@RequestPart("file") MultipartFile multipartFile,
                                              GenChartByAIRequest genChartByAIRequest, HttpServletRequest request) {
         String name = genChartByAIRequest.getName();
         String goal = genChartByAIRequest.getGoal();
@@ -264,40 +271,63 @@ public class ChartController {
         sb.append("Assume you are a data analyst, please help me make some data analysis based on my analysis goal and data.").append("\n");
         sb.append("Analysis goal: ").append(goal).append("\n");
         sb.append("Analysis data: ").append(analysisData).append("\n");
+        if (StringUtils.isNotBlank(chartType)) {
+            sb.append("Chart type: ").append(chartType).append("\n");
+        } else {
+            sb.append("Chart type: ").append("any chart type").append("\n");
+        }
 
-        return ResultUtils.success(sb.toString());
+        // use GptManager to invoke gpt api and get the reply
+        String gptResult = gptManager.doChat(sb.toString());
 
-//        String biz = uploadFileRequest.getBiz();
-//        FileUploadBizEnum fileUploadBizEnum = FileUploadBizEnum.getEnumByValue(biz);
-//        if (fileUploadBizEnum == null) {
-//            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-//        }
-//        validFile(multipartFile, fileUploadBizEnum);
-//        User loginUser = userService.getLoginUser(request);
-//        // 文件目录：根据业务、用户来划分
-//        String uuid = RandomStringUtils.randomAlphanumeric(8);
-//        String filename = uuid + "-" + multipartFile.getOriginalFilename();
-//        String filepath = String.format("/%s/%s/%s", fileUploadBizEnum.getValue(), loginUser.getId(), filename);
-//        File file = null;
-//        try {
-//            // 上传文件
-//            file = File.createTempFile(filepath, null);
-//            multipartFile.transferTo(file);
-//            cosManager.putObject(filepath, file);
-//            // 返回可访问地址
-//            return ResultUtils.success(FileConstant.COS_HOST + filepath);
-//        } catch (Exception e) {
-//            log.error("file upload error, filepath = " + filepath, e);
-//            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
-//        } finally {
-//            if (file != null) {
-//                // 删除临时文件
-//                boolean delete = file.delete();
-//                if (!delete) {
-//                    log.error("file delete error, filepath = {}", filepath);
-//                }
-//            }
-//        }
+        // get gpt response class based on gpt result
+        User loginUser = userService.getLoginUser(request);
+        GptResultResponse gptResultResponse = getGptResultResponse(gptResult);
+
+        // save chart data to database
+        Chart chart = saveChartToDatabase(genChartByAIRequest, gptResultResponse, analysisData, loginUser);
+        gptResultResponse.setChartId(chart.getId());
+        return ResultUtils.success(gptResultResponse);
+    }
+
+    @NotNull
+    private static GptResultResponse getGptResultResponse(String gptResult) {
+
+        String[] gptResults = gptResult.split("\\Q*****\\E");
+        if (gptResults.length < 2) {
+            throw new RuntimeException("gpt result error: not enough results");
+        }
+        String genChart = gptResults[0];
+        String genResult = gptResults[1];
+
+        // trim genChart and genResult data
+        genChart = genChart
+                .replaceFirst("^```javascript", "")
+                .replaceFirst("```", "")
+                .trim();
+        genResult = genResult.trim();
+
+        GptResultResponse gptResultResponse = new GptResultResponse();
+        gptResultResponse.setGenChart(genChart);
+        gptResultResponse.setGenResult(genResult);
+        return gptResultResponse;
+    }
+
+    private Chart saveChartToDatabase(GenChartByAIRequest genChartByAIRequest, GptResultResponse gptResultResponse, String analysisData, User loginUser) {
+        Chart chart = new Chart();
+
+        chart.setName(genChartByAIRequest.getName());
+        chart.setGoal(genChartByAIRequest.getGoal());
+        chart.setChartData(analysisData);
+        chart.setChartType(genChartByAIRequest.getChartType());
+        chart.setGenChart(gptResultResponse.getGenChart());
+        chart.setGenResult(gptResultResponse.getGenResult());
+        chart.setUserId(loginUser.getId());
+
+        boolean saveResult = chartService.save(chart);
+        ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "error: fail to save chart");
+
+        return chart;
     }
 
 }
