@@ -23,6 +23,15 @@ export default [
     ],
   },
   {
+    path: '/',
+    redirect: '/add_chart',
+  },
+  {
+    path: '/add_chart',
+    icon: 'smile',
+    component: './AddChart',
+  },
+  {
     path: '/welcome',
     name: 'welcome',
     icon: 'smile',
@@ -44,16 +53,6 @@ export default [
         component: './Admin',
       },
     ],
-  },
-  {
-    name: 'list.table-list',
-    icon: 'table',
-    path: '/list',
-    component: './TableList',
-  },
-  {
-    path: '/',
-    redirect: '/welcome',
   },
   {
     path: '*',

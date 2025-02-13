@@ -303,6 +303,7 @@ public class ChartController {
         // trim genChart and genResult data
         genChart = genChart
                 .replaceFirst("^```javascript", "")
+                .replaceFirst("^```json", "")
                 .replaceFirst("```", "")
                 .trim();
         genResult = genResult.trim();

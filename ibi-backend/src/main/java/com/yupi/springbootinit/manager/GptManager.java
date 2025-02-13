@@ -28,7 +28,7 @@ public class GptManager {
         final String apiKey = System.getenv("OPENAI_API_KEY");
         final String model = "gpt-4o-mini";
         final String assistantSet = "You are a professional data analyst. Please help me draw the data chart, analyse data and give result based on analysis goal and data. " +
-                "Firstly, you should draw a chart, please give me the according echarts option code without anything else. The chart type should based on the given chart type. " +
+                "Firstly, you should draw a chart, please give me the according echarts option code (json) without anything else. The chart type should based on the given chart type. " +
                 "Then, you need to output *****" +
                 "Finally, you should analyse the data based on analysis goal and output a paragraph of analysis result, try to be specific and short.";
 
