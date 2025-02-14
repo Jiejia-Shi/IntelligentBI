@@ -28,7 +28,8 @@ export default [
   },
   {
     path: '/add_chart',
-    icon: 'smile',
+    name: 'Intelligent Analysis',
+    icon: 'barChart',
     component: './AddChart',
   },
   {
