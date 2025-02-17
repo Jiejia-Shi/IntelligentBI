@@ -149,7 +149,7 @@ public class ChartController {
     }
 
     /**
-     * 分页获取列表（仅管理员）
+     * 分页获取列表
      *
      * @param chartQueryRequest
      * @return
@@ -160,7 +160,7 @@ public class ChartController {
         long current = chartQueryRequest.getCurrent();
         long size = chartQueryRequest.getPageSize();
         Page<Chart> chartPage = chartService.page(new Page<>(current, size),
-                getQueryWrapper(chartQueryRequest));
+                getQueryWrapper(chartQueryRequest).orderByDesc("id"));
         return ResultUtils.success(chartPage);
     }
 

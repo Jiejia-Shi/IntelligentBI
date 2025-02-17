@@ -33,11 +33,17 @@ export default [
     component: './AddChart',
   },
   {
-    path: '/welcome',
-    name: 'welcome',
-    icon: 'smile',
-    component: './Welcome',
+    path: '/my_chart',
+    name: 'My Chart',
+    icon: 'pieChart',
+    component: './MyChart',
   },
+  // {
+  //   path: '/welcome',
+  //   name: 'welcome',
+  //   icon: 'smile',
+  //   component: './Welcome',
+  // },
   {
     path: '/admin',
     name: 'admin',
