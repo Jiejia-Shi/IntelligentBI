@@ -1,5 +1,6 @@
 package com.yupi.springbootinit.controller;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -14,6 +15,7 @@ import com.yupi.springbootinit.constant.UserConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.manager.GptManager;
+import com.yupi.springbootinit.manager.RedisLimiterManager;
 import com.yupi.springbootinit.model.dto.chart.*;
 import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
@@ -29,6 +31,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.redisson.RedissonRateLimiter;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -57,6 +61,9 @@ public class ChartController {
 
     @Resource
     private GptManager gptManager;
+
+    @Resource
+    private RedisLimiterManager redisLimiterManager;
 
 
     // region 增删改查
@@ -263,6 +270,22 @@ public class ChartController {
         ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "Analysis goal is empty");
         ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "Name is too long");
 
+        // verify files
+        long fileSize = multipartFile.getSize();
+        String fileName = multipartFile.getOriginalFilename();
+        // size should <= 1MB
+        long maxSize = 1024 * 1024;
+        ThrowUtils.throwIf(fileSize > maxSize, ErrorCode.PARAMS_ERROR, "We only support files less than 1MB");
+        // verify file type
+        String suffix = FileUtil.getSuffix(fileName);
+        List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
+        ThrowUtils.throwIf(validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "invalid file type");
+
+        // rate limit
+        User loginUser = userService.getLoginUser(request);
+        String rateLimitKey = "genChartByAI_" + loginUser.getId();
+        redisLimiterManager.doRateLimit(rateLimitKey, 1);
+
         // convert excel to csv
         String analysisData = ExcelUtils.convertExcelToCsv(multipartFile);
 
@@ -281,7 +304,6 @@ public class ChartController {
         String gptResult = gptManager.doChat(sb.toString());
 
         // get gpt response class based on gpt result
-        User loginUser = userService.getLoginUser(request);
         GptResultResponse gptResultResponse = getGptResultResponse(gptResult);
 
         // save chart data to database
