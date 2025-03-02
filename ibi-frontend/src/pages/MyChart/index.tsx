@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {listChartByPageUsingPost} from "@/services/ibi/chartController";
-import {Avatar, Card, List, message} from 'antd';
+import {Avatar, Card, List, message, Result} from 'antd';
 import ReactECharts from "echarts-for-react";
 import Search from "antd/es/input/Search";
 
@@ -26,9 +26,11 @@ const MyChartPage: React.FC = () => {
 
         if (res.data.records) {
           res.data.records.forEach(data => {
-            const chartOption = JSON.parse(data.genChart ?? '{}');
-            chartOption.title = undefined;
-            data.genChart = JSON.stringify(chartOption);
+            if (data.status === 'succeed') {
+              const chartOption = JSON.parse(data.genChart ?? '{}');
+              chartOption.title = undefined;
+              data.genChart = JSON.stringify(chartOption);
+            }
           })
         }
       } else {
@@ -94,12 +96,46 @@ const MyChartPage: React.FC = () => {
               title={item.name}
               description={item.chartType ? ('Chart Type: ' + item.chartType) : undefined }
             />
-            <div style={{ marginBottom: 16}} />
-            {'Analysis Goal: ' + item.goal}
-            <div style={{ marginBottom: 16}} />
-            <Card>
-              <ReactECharts option={JSON.parse(item.genChart ?? '{}')} />
-            </Card>
+              {
+                item.status === 'succeed' && <>
+                  <div style={{ marginBottom: 16}} />
+                  {'Analysis Goal: ' + item.goal}
+                  <div style={{ marginBottom: 16}} />
+                  <Card>
+                    <ReactECharts option={JSON.parse(item.genChart ?? '{}')} />
+                  </Card>
+                </>
+              }
+              {
+                item.status === 'wait' && <>
+                  <Result
+                    status="info"
+                    title="analysis in waiting for progress"
+                    subTitle={"please wait for the analysis to proceed"}
+                  />
+                </>
+              }
+              {
+                item.status === 'running' && <>
+                  <Result
+                    status="info"
+                    title="analysis in progress"
+                    subTitle={"please wait for the analysis to proceed"}
+                  />
+                </>
+              }
+              {
+                item.status === 'failed' && <>
+                <Result
+                  status="error"
+                  title="failed to analyse"
+                  subTitle={item.execMessage}
+                  />
+                </>
+              }
+              <>
+
+              </>
             </Card>
           </List.Item>
         )}

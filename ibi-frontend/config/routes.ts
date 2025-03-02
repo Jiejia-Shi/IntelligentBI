@@ -28,9 +28,15 @@ export default [
   },
   {
     path: '/add_chart',
-    name: 'Intelligent Analysis',
+    name: 'Intelligent Analysis (Sync)',
     icon: 'barChart',
     component: './AddChart',
+  },
+  {
+    path: '/add_chart_async',
+    name: 'Intelligent Analysis (Async)',
+    icon: 'barChart',
+    component: './AddChartAsync',
   },
   {
     path: '/my_chart',

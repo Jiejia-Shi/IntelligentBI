@@ -41,6 +41,8 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 帖子接口
@@ -64,6 +66,9 @@ public class ChartController {
 
     @Resource
     private RedisLimiterManager redisLimiterManager;
+
+    @Resource
+    private ThreadPoolExecutor threadPoolExecutor;
 
 
     // region 增删改查
@@ -251,9 +256,9 @@ public class ChartController {
         return queryWrapper;
     }
 
+
     /**
-     * upload file and generate chart
-     *
+     * gen chart (sync)
      * @param multipartFile
      * @param genChartByAIRequest
      * @param request
@@ -261,7 +266,7 @@ public class ChartController {
      */
     @PostMapping("/gen")
     public BaseResponse<GptResultResponse> genChartByAI(@RequestPart("file") MultipartFile multipartFile,
-                                             GenChartByAIRequest genChartByAIRequest, HttpServletRequest request) {
+                                                        GenChartByAIRequest genChartByAIRequest, HttpServletRequest request) {
         String name = genChartByAIRequest.getName();
         String goal = genChartByAIRequest.getGoal();
         String chartType = genChartByAIRequest.getChartType();
@@ -279,7 +284,7 @@ public class ChartController {
         // verify file type
         String suffix = FileUtil.getSuffix(fileName);
         List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
-        ThrowUtils.throwIf(validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "invalid file type");
+        ThrowUtils.throwIf(!validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "invalid file type");
 
         // rate limit
         User loginUser = userService.getLoginUser(request);
@@ -312,6 +317,104 @@ public class ChartController {
         return ResultUtils.success(gptResultResponse);
     }
 
+    /**
+     * gen chart async
+     * @param multipartFile
+     * @param genChartByAIRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/gen/async")
+    public BaseResponse<GptResultResponse> genChartByAIAsync(@RequestPart("file") MultipartFile multipartFile,
+                                             GenChartByAIRequest genChartByAIRequest, HttpServletRequest request) {
+        String name = genChartByAIRequest.getName();
+        String goal = genChartByAIRequest.getGoal();
+        String chartType = genChartByAIRequest.getChartType();
+
+        // verification
+        ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "Analysis goal is empty");
+        ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "Name is too long");
+
+        // verify files
+        long fileSize = multipartFile.getSize();
+        String fileName = multipartFile.getOriginalFilename();
+        // size should <= 1MB
+        long maxSize = 1024 * 1024;
+        ThrowUtils.throwIf(fileSize > maxSize, ErrorCode.PARAMS_ERROR, "We only support files less than 1MB");
+        // verify file type
+        String suffix = FileUtil.getSuffix(fileName);
+        List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
+        ThrowUtils.throwIf(!validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "invalid file type");
+
+        // rate limit
+        User loginUser = userService.getLoginUser(request);
+        String rateLimitKey = "genChartByAI_" + loginUser.getId();
+        redisLimiterManager.doRateLimit(rateLimitKey, 1);
+
+        // convert excel to csv
+        String analysisData = ExcelUtils.convertExcelToCsv(multipartFile);
+
+        // save chart data to database
+        Chart chart = saveChartToDatabaseAsync(genChartByAIRequest, analysisData, loginUser);
+        // gptResultResponse.setChartId(chart.getId());
+
+        // build gpt request
+        StringBuilder sb = new StringBuilder();
+        sb.append("Assume you are a data analyst, please help me make some data analysis based on my analysis goal and data.").append("\n");
+        sb.append("Analysis goal: ").append(goal).append("\n");
+        sb.append("Analysis data: ").append(analysisData).append("\n");
+        if (StringUtils.isNotBlank(chartType)) {
+            sb.append("Chart type: ").append(chartType).append("\n");
+        } else {
+            sb.append("Chart type: ").append("any chart type").append("\n");
+        }
+
+        // run gpt request async
+        CompletableFuture.runAsync(() -> {
+            // update its status to running
+            Chart updateChart = new Chart();
+            updateChart.setId(chart.getId());
+            updateChart.setStatus("running");
+            boolean b = chartService.updateById(updateChart);
+            if (!b) {
+                handleChartUpdateError(chart.getId(), "failed to update chart status to running");
+                return;
+            }
+
+            // use GptManager to invoke gpt api and get the reply
+            String gptResult = gptManager.doChat(sb.toString());
+
+            // get gpt response class based on gpt result
+            GptResultResponse gptResultResponse = getGptResultResponse(gptResult);
+
+            // update its status to running
+            Chart updateChartResult = new Chart();
+            updateChartResult.setId(chart.getId());
+            updateChartResult.setStatus("succeed");
+            updateChartResult.setGenChart(gptResultResponse.getGenChart());
+            updateChartResult.setGenResult(gptResultResponse.getGenResult());
+            boolean updateResult = chartService.updateById(updateChartResult);
+            if (!updateResult) {
+                handleChartUpdateError(chart.getId(), "failed to update chart status to succeed");
+            }
+        }, threadPoolExecutor);
+
+        GptResultResponse gptResultResponse = new GptResultResponse();
+        gptResultResponse.setChartId(chart.getId());
+        return ResultUtils.success(gptResultResponse);
+    }
+
+    private void handleChartUpdateError (long chartId, String execMessage) {
+        Chart updateChart = new Chart();
+        updateChart.setId(chartId);
+        updateChart.setStatus("failed");
+        updateChart.setExecMessage(execMessage);
+        boolean b = chartService.updateById(updateChart);
+        if (!b) {
+            log.error("failed to update chart status to failed");
+        }
+    }
+
     @NotNull
     private static GptResultResponse getGptResultResponse(String gptResult) {
 
@@ -336,6 +439,22 @@ public class ChartController {
         return gptResultResponse;
     }
 
+    private Chart saveChartToDatabaseAsync(GenChartByAIRequest genChartByAIRequest, String analysisData, User loginUser) {
+        Chart chart = new Chart();
+
+        chart.setName(genChartByAIRequest.getName());
+        chart.setGoal(genChartByAIRequest.getGoal());
+        chart.setChartData(analysisData);
+        chart.setChartType(genChartByAIRequest.getChartType());
+        chart.setUserId(loginUser.getId());
+        chart.setStatus("wait");
+
+        boolean saveResult = chartService.save(chart);
+        ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "error: fail to save chart");
+
+        return chart;
+    }
+
     private Chart saveChartToDatabase(GenChartByAIRequest genChartByAIRequest, GptResultResponse gptResultResponse, String analysisData, User loginUser) {
         Chart chart = new Chart();
 
@@ -346,6 +465,7 @@ public class ChartController {
         chart.setGenChart(gptResultResponse.getGenChart());
         chart.setGenResult(gptResultResponse.getGenResult());
         chart.setUserId(loginUser.getId());
+        chart.setStatus("succeed");
 
         boolean saveResult = chartService.save(chart);
         ThrowUtils.throwIf(!saveResult, ErrorCode.SYSTEM_ERROR, "error: fail to save chart");

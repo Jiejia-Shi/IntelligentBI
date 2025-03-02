@@ -50,6 +50,10 @@ public class Chart {
      */
     private String genResult;
 
+    private String status;
+
+    private String execMessage;
+
     /**
      * 创建者
      */
