@@ -2,7 +2,11 @@ import { UploadOutlined } from '@ant-design/icons';
 import { Button, Card, Form, Input, message, Select, Space, Upload } from 'antd';
 import React, { useState } from 'react';
 import TextArea from 'antd/es/input/TextArea';
-import {genChartByAiAsyncUsingPost, genChartByAiUsingPost} from '@/services/ibi/chartController';
+import {
+  genChartByAiAsyncMqUsingPost,
+  genChartByAiAsyncUsingPost,
+  genChartByAiUsingPost
+} from '@/services/ibi/chartController';
 import {useForm} from "antd/lib/form/Form";
 
 const AddChartAsync: React.FC = () => {
@@ -19,7 +23,8 @@ const AddChartAsync: React.FC = () => {
       file: undefined,
     };
     try {
-      const res = await genChartByAiAsyncUsingPost(params, {}, values.file.file.originFileObj);
+      // const res = await genChartByAiAsyncUsingPost(params, {}, values.file.file.originFileObj);
+      const res = await genChartByAiAsyncMqUsingPost(params, {}, values.file.file.originFileObj);
       console.log(res);
       if (!res?.data) {
         message.error('analysis submission failed');

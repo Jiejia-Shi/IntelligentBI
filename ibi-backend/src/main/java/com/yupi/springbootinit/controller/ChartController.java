@@ -10,7 +10,6 @@ import com.yupi.springbootinit.common.DeleteRequest;
 import com.yupi.springbootinit.common.ErrorCode;
 import com.yupi.springbootinit.common.ResultUtils;
 import com.yupi.springbootinit.constant.CommonConstant;
-import com.yupi.springbootinit.constant.FileConstant;
 import com.yupi.springbootinit.constant.UserConstant;
 import com.yupi.springbootinit.exception.BusinessException;
 import com.yupi.springbootinit.exception.ThrowUtils;
@@ -22,6 +21,7 @@ import com.yupi.springbootinit.model.entity.Chart;
 import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.model.enums.FileUploadBizEnum;
 import com.yupi.springbootinit.model.vo.GptResultResponse;
+import com.yupi.springbootinit.mq.BIMessageProducer;
 import com.yupi.springbootinit.service.ChartService;
 import com.yupi.springbootinit.service.UserService;
 import com.yupi.springbootinit.utils.ExcelUtils;
@@ -44,12 +44,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 
-/**
- * 帖子接口
- *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
- * @from <a href="https://yupi.icu">编程导航知识星球</a>
- */
 @RestController
 @RequestMapping("/chart")
 @Slf4j
@@ -70,11 +64,12 @@ public class ChartController {
     @Resource
     private ThreadPoolExecutor threadPoolExecutor;
 
+    @Resource
+    private BIMessageProducer biMessageProducer;
 
-    // region 增删改查
 
     /**
-     * 创建
+     * add
      *
      * @param chartAddRequest
      * @param request
@@ -96,7 +91,7 @@ public class ChartController {
     }
 
     /**
-     * 删除
+     * delete
      *
      * @param deleteRequest
      * @param request
@@ -121,7 +116,7 @@ public class ChartController {
     }
 
     /**
-     * 更新（仅管理员）
+     * update
      *
      * @param chartUpdateRequest
      * @return
@@ -143,7 +138,7 @@ public class ChartController {
     }
 
     /**
-     * 根据 id 获取
+     * get by id
      *
      * @param id
      * @return
@@ -161,7 +156,7 @@ public class ChartController {
     }
 
     /**
-     * 分页获取列表
+     * get chart list
      *
      * @param chartQueryRequest
      * @return
@@ -177,7 +172,7 @@ public class ChartController {
     }
 
     /**
-     * 分页获取列表（封装类）
+     * get chart vo list
      *
      * @param chartQueryRequest
      * @param request
@@ -195,11 +190,8 @@ public class ChartController {
         return ResultUtils.success(chartPage);
     }
 
-
-    // endregion
-
     /**
-     * 编辑（用户）
+     * edit
      *
      * @param chartEditRequest
      * @param request
@@ -225,12 +217,6 @@ public class ChartController {
         return ResultUtils.success(result);
     }
 
-    /**
-     * 获取查询包装类
-     *
-     * @param chartQueryRequest
-     * @return
-     */
     private QueryWrapper<Chart> getQueryWrapper(ChartQueryRequest chartQueryRequest) {
         QueryWrapper<Chart> queryWrapper = new QueryWrapper<>();
         if (chartQueryRequest == null) {
@@ -401,6 +387,57 @@ public class ChartController {
 
         GptResultResponse gptResultResponse = new GptResultResponse();
         gptResultResponse.setChartId(chart.getId());
+        return ResultUtils.success(gptResultResponse);
+    }
+
+    /**
+     * gen chart async (mq)
+     * @param multipartFile
+     * @param genChartByAIRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/gen/async/mq")
+    public BaseResponse<GptResultResponse> genChartByAIAsyncMq(@RequestPart("file") MultipartFile multipartFile,
+                                                             GenChartByAIRequest genChartByAIRequest, HttpServletRequest request) {
+        String name = genChartByAIRequest.getName();
+        String goal = genChartByAIRequest.getGoal();
+        String chartType = genChartByAIRequest.getChartType();
+
+        // verification
+        ThrowUtils.throwIf(StringUtils.isBlank(goal), ErrorCode.PARAMS_ERROR, "Analysis goal is empty");
+        ThrowUtils.throwIf(StringUtils.isNotBlank(name) && name.length() > 100, ErrorCode.PARAMS_ERROR, "Name is too long");
+
+        // verify files
+        long fileSize = multipartFile.getSize();
+        String fileName = multipartFile.getOriginalFilename();
+        // size should <= 1MB
+        long maxSize = 1024 * 1024;
+        ThrowUtils.throwIf(fileSize > maxSize, ErrorCode.PARAMS_ERROR, "We only support files less than 1MB");
+        // verify file type
+        String suffix = FileUtil.getSuffix(fileName);
+        List<String> validFileSuffixList = Arrays.asList("xlsx", "xls");
+        ThrowUtils.throwIf(!validFileSuffixList.contains(suffix), ErrorCode.PARAMS_ERROR, "invalid file type");
+
+        // rate limit
+        User loginUser = userService.getLoginUser(request);
+        String rateLimitKey = "genChartByAI_" + loginUser.getId();
+        redisLimiterManager.doRateLimit(rateLimitKey, 1);
+
+        // convert excel to csv
+        String analysisData = ExcelUtils.convertExcelToCsv(multipartFile);
+
+        // save chart data to database
+        Chart chart = saveChartToDatabaseAsync(genChartByAIRequest, analysisData, loginUser);
+        // gptResultResponse.setChartId(chart.getId());
+
+        long newChartId = chart.getId();
+
+        // send message
+        biMessageProducer.sendMessage(String.valueOf(newChartId));
+
+        GptResultResponse gptResultResponse = new GptResultResponse();
+        gptResultResponse.setChartId(newChartId);
         return ResultUtils.success(gptResultResponse);
     }
 
