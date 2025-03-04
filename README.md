@@ -4,9 +4,9 @@ IntelligentBI is an advanced business intelligence (BI) system powered by the Op
 
 Key technologies: Java, React, OpenAI, Spring Boot, Mybatis, MySQL, AWS, Redis, RabbitMQ
 
-<img width="490" alt="216511505159d677a7f0cf3fecc27b4" src="https://github.com/user-attachments/assets/a18c877d-7b07-4bb2-bb68-eee1cf36702b" />
+<img width="480" alt="216511505159d677a7f0cf3fecc27b4" src="https://github.com/user-attachments/assets/a18c877d-7b07-4bb2-bb68-eee1cf36702b" />
 
-<img width="490" alt="78ae494010052f2f3da641b9d7372d3" src="https://github.com/user-attachments/assets/2eca0f98-1407-44f4-be49-9b20bdc6da71" />
+<img width="480" alt="78ae494010052f2f3da641b9d7372d3" src="https://github.com/user-attachments/assets/2eca0f98-1407-44f4-be49-9b20bdc6da71" />
 
 # How to use it
 1. Choose analysis mode (**Sync** or **Async**)
