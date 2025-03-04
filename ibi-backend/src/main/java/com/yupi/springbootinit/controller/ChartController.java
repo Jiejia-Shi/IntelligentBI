@@ -16,7 +16,6 @@ import com.yupi.springbootinit.exception.ThrowUtils;
 import com.yupi.springbootinit.manager.GptManager;
 import com.yupi.springbootinit.manager.RedisLimiterManager;
 import com.yupi.springbootinit.model.dto.chart.*;
-import com.yupi.springbootinit.model.dto.file.UploadFileRequest;
 import com.yupi.springbootinit.model.entity.Chart;
 import com.yupi.springbootinit.model.entity.User;
 import com.yupi.springbootinit.model.enums.FileUploadBizEnum;
@@ -104,10 +103,10 @@ public class ChartController {
         }
         User user = userService.getLoginUser(request);
         long id = deleteRequest.getId();
-        // 判断是否存在
+        // if exist
         Chart oldChart = chartService.getById(id);
         ThrowUtils.throwIf(oldChart == null, ErrorCode.NOT_FOUND_ERROR);
-        // 仅本人或管理员可删除
+
         if (!oldChart.getUserId().equals(user.getId()) && !userService.isAdmin(request)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
@@ -130,7 +129,7 @@ public class ChartController {
         Chart chart = new Chart();
         BeanUtils.copyProperties(chartUpdateRequest, chart);
         long id = chartUpdateRequest.getId();
-        // 判断是否存在
+        // if exist
         Chart oldChart = chartService.getById(id);
         ThrowUtils.throwIf(oldChart == null, ErrorCode.NOT_FOUND_ERROR);
         boolean result = chartService.updateById(chart);
@@ -183,7 +182,7 @@ public class ChartController {
                                                        HttpServletRequest request) {
         long current = chartQueryRequest.getCurrent();
         long size = chartQueryRequest.getPageSize();
-        // 限制爬虫
+        // limit
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
         Page<Chart> chartPage = chartService.page(new Page<>(current, size),
                 getQueryWrapper(chartQueryRequest));
@@ -206,10 +205,10 @@ public class ChartController {
         BeanUtils.copyProperties(chartEditRequest, chart);
         User loginUser = userService.getLoginUser(request);
         long id = chartEditRequest.getId();
-        // 判断是否存在
+        // if exist
         Chart oldChart = chartService.getById(id);
         ThrowUtils.throwIf(oldChart == null, ErrorCode.NOT_FOUND_ERROR);
-        // 仅本人或管理员可编辑
+
         if (!oldChart.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
         }
