@@ -22,12 +22,6 @@ import java.util.stream.Collectors;
 public class ExcelUtils {
 
     public static String convertExcelToCsv(MultipartFile multipartFile) {
-//        File file = null;
-//        try {
-//            file = ResourceUtils.getFile("classpath:test_excel.xlsx");
-//        } catch (FileNotFoundException e) {
-//            throw new RuntimeException(e);
-//        }
 
         // read data from Excel
         List<Map<Integer, String>> list = null;

@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {listChartByPageUsingPost} from "@/services/ibi/chartController";
-import {Avatar, Card, List, message, Result} from 'antd';
+import {Avatar, Card, List, message, Result, Spin} from 'antd';
 import ReactECharts from "echarts-for-react";
 import Search from "antd/es/input/Search";
 
@@ -101,6 +101,11 @@ const MyChartPage: React.FC = () => {
                   <div style={{ marginBottom: 16}} />
                   {'Analysis Goal: ' + item.goal}
                   <div style={{ marginBottom: 16}} />
+                  <Card title={"Analysis Result"}>
+                    <div>
+                      {item.genResult}
+                    </div>
+                  </Card>
                   <Card>
                     <ReactECharts option={JSON.parse(item.genChart ?? '{}')} />
                   </Card>
